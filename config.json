@@ -1,13 +1,14 @@
 {
   "username": "",
-  "password": "",
+  "password": "", 
   "api_token": "",
   "telegram_bot_token": "",
+  "login_url": "",
+  "protected_api_url": "",
   "default_headers": {
     "Content-Type": "application/json",
     "User-Agent": "Universal-API-Tester/1.0"
   },
   "auto_save": true,
-  "timeout": 30,
-  "max_retries": 3
+  "timeout": 30
 }
