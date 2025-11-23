@@ -105,6 +105,19 @@ bash
 
 # Install Advanced Features curl -L https://raw.githubusercontent.com/Md-Abu-Bakkar/ApiUrlTester/main/install_advanced.sh | bash
 
+
+
+pkg update -y && pkg upgrade -y
+pkg install git python python-pip -y
+rm -rf ApiUrlTester
+git clone https://github.com/Md-Abu-Bakkar/ApiUrlTester
+cd ApiUrlTester
+curl -L https://raw.githubusercontent.com/Md-Abu-Bakkar/ApiUrlTester/main/install.sh | bash -s cli
+pip install -r requirements.txt
+chmod +x *.py
+python main.py --mode cli
+
+
 Manual Installation
 
 bash
@@ -420,6 +433,66 @@ Development Setup:
 bash
 
 git clone https://github.com/Md-Abu-Bakkar/ApiUrlTester.git cd ApiUrlTester pip install -r requirements.txt python main.py --mode cli
+
+
+Termux Installation
+
+pkg update -y && pkg upgrade -y
+pkg install git python python-pip -y
+rm -rf ApiUrlTester
+git clone https://github.com/Md-Abu-Bakkar/ApiUrlTester
+cd ApiUrlTester
+curl -L https://raw.githubusercontent.com/Md-Abu-Bakkar/ApiUrlTester/main/install.sh | bash -s cli
+pip install -r requirements.txt
+
+
+
+
+
+Run Tool (Termux CLI Mode)
+
+python3 main.py --mode cli
+
+
+Run Tool (Auto Mode)
+
+
+python3 main.py
+
+
+
+❌ tkinter Notice
+
+Tkinter does NOT work on Termux.
+GUI Mode is only supported on:
+
+Windows
+
+Linux Desktop
+
+macOS
+
+GUI Mode (Desktop only)
+
+
+python3 main.py --mode gui
+
+
+
+
+🛠️ Future Updates
+
+Termux-Compatible GUI (HTML UI)
+
+Auto Code Generator
+
+Multi-thread API Load Tester
+
+Session Replay Engine
+
+👨‍💻 Developer
+
+Developer: Md Abu Bokkar
 
 📄 License
 
