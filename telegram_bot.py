@@ -3,6 +3,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 import json
 import os
+import requests
 from api_tester import APITester
 from data_manager import DataManager
 
@@ -25,6 +26,7 @@ class TelegramBot:
     def setup_handlers(self):
         self.application.add_handler(CommandHandler("start", self.start))
         self.application.add_handler(CommandHandler("test", self.test_api))
+        self.application.add_handler(CommandHandler("login", self.login_protected))
         self.application.add_handler(CommandHandler("results", self.get_results))
         self.application.add_handler(CommandHandler("logs", self.get_logs))
         self.application.add_handler(CommandHandler("status", self.get_status))
@@ -34,10 +36,13 @@ class TelegramBot:
         keyboard = [
             [
                 InlineKeyboardButton("🚀 Test API", callback_data="test_api"),
-                InlineKeyboardButton("📊 Results", callback_data="get_results"),
+                InlineKeyboardButton("🔐 Login API", callback_data="login_api"),
             ],
             [
+                InlineKeyboardButton("📊 Results", callback_data="get_results"),
                 InlineKeyboardButton("📋 Logs", callback_data="get_logs"),
+            ],
+            [
                 InlineKeyboardButton("📈 Status", callback_data="get_status"),
             ]
         ]
@@ -45,17 +50,100 @@ class TelegramBot:
         
         await update.message.reply_text(
             '🤖 *Universal API Tester Bot*\n\n'
-            'I can help you test APIs and manage your results!\n\n'
+            'I can help you test APIs, login to protected systems, and manage results!\n\n'
             'Available commands:\n'
             '/start - Show this menu\n'
-            '/test <url> [method] - Test an API endpoint\n'
+            '/test <url> [method] - Test an API endpoint\n' 
+            '/login - Login to protected API\n'
             '/results - Get latest test results\n'
             '/logs - Download log files\n'
             '/status - Check system status',
             reply_markup=reply_markup,
             parse_mode='Markdown'
         )
+    
+    async def login_protected(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Login to protected API"""
+        try:
+            # Load config
+            with open('config.json', 'r') as f:
+                config = json.load(f)
+                
+            login_url = config.get('login_url')
+            protected_url = config.get('protected_api_url')
+            username = config.get('username')
+            password = config.get('password')
+            
+            if not all([login_url, username, password]):
+                await update.message.reply_text(
+                    '❌ *Missing Configuration*\n\n'
+                    'Please set in config:\n'
+                    '• Login URL\n• Username\n• Password\n• Protected API URL',
+                    parse_mode='Markdown'
+                )
+                return
+                
+            await update.message.reply_text('🔄 Logging in to protected API...')
+            
+            # Login request
+            login_data = {'username': username, 'password': password}
+            login_response = requests.post(login_url, json=login_data)
+            
+            if login_response.status_code == 200:
+                # Access protected API
+                headers = {}
+                try:
+                    token = login_response.json().get('token') or login_response.json().get('access_token')
+                    if token:
+                        headers['Authorization'] = f'Bearer {token}'
+                except:
+                    pass
+                    
+                protected_response = requests.get(protected_url, headers=headers, cookies=login_response.cookies)
+                
+                result = {
+                    'url': protected_url,
+                    'method': 'GET',
+                    'status_code': protected_response.status_code,
+                    'timestamp': datetime.now().isoformat(),
+                    'success': protected_response.status_code == 200,
+                    'type': 'protected_api'
+                }
+                
+                try:
+                    result['response'] = protected_response.json()
+                except:
+                    result['response'] = protected_response.text
+                    
+                self.data_manager.save_response(result)
+                
+                if result['success']:
+                    await update.message.reply_text(
+                        f'✅ *Protected API Access Successful!*\n\n'
+                        f'📊 Status: {result["status_code"]}\n'
+                        f'🔐 Type: Protected API\n'
+                        f'💾 Saved to logs',
+                        parse_mode='Markdown'
+                    )
+                else:
+                    await update.message.reply_text(
+                        f'❌ *Protected API Access Failed*\n\n'
+                        f'📊 Status: {result["status_code"]}\n'
+                        f'🔐 Type: Protected API',
+                        parse_mode='Markdown'
+                    )
+            else:
+                await update.message.reply_text(
+                    f'❌ *Login Failed!*\n\n'
+                    f'Status: {login_response.status_code}\n'
+                    f'Response: {login_response.text}',
+                    parse_mode='Markdown'
+                )
+                
+        except Exception as e:
+            await update.message.reply_text(f'❌ Error: {str(e)}')
         
+    # ... rest of the existing methods remain same
     async def test_api(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Test an API endpoint"""
         if not context.args:
@@ -115,6 +203,8 @@ class TelegramBot:
                         f'✅ *Success:* {latest.get("success", False)}\n'
                         f'🕐 *When:* {latest.get("timestamp", "N/A")}'
                     )
+                    if latest.get('type') == 'protected_api':
+                        message += '\n🔐 *Type:* Protected API'
                 else:
                     message = 'No test results found.'
             else:
@@ -148,10 +238,17 @@ class TelegramBot:
         try:
             # Count test results
             test_count = 0
+            protected_count = 0
             if os.path.exists('data.json'):
                 with open('data.json', 'r') as f:
                     data = json.load(f)
-                    test_count = len(data) if isinstance(data, list) else 1
+                    if isinstance(data, list):
+                        test_count = len(data)
+                        protected_count = len([x for x in data if x.get('type') == 'protected_api'])
+                    else:
+                        test_count = 1
+                        if data.get('type') == 'protected_api':
+                            protected_count = 1
                     
             # Check log sizes
             system_log_size = os.path.getsize('system.log') if os.path.exists('system.log') else 0
@@ -159,7 +256,8 @@ class TelegramBot:
             
             message = (
                 f'📈 *System Status*\n\n'
-                f'🧪 *Tests Performed:* {test_count}\n'
+                f'🧪 *Total Tests:* {test_count}\n'
+                f'🔐 *Protected APIs:* {protected_count}\n'
                 f'📊 *System Log Size:* {system_log_size} bytes\n'
                 f'💰 *Earnings Log Size:* {earnings_log_size} bytes\n'
                 f'🤖 *Bot Status:* ✅ Online\n'
@@ -182,7 +280,6 @@ def start_bot(token):
     bot.run()
 
 if __name__ == '__main__':
-    # For testing
     import sys
     if len(sys.argv) > 1:
         start_bot(sys.argv[1])
