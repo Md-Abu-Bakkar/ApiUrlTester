@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import requests
 import json
 import time
@@ -106,3 +107,8 @@ class APITester:
             results.append(result)
             
         return results
+
+if __name__ == '__main__':
+    # Test the class
+    tester = APITester()
+    print("API Tester class loaded successfully!")
