@@ -99,19 +99,19 @@ One-Command Installation (Recommended)
 
 bash
 
-# For Desktop UI (Termux Desktop or Linux) curl -L https://raw.githubusercontent.com/Md-Abu-Bakkar/ApiUrlTester/main/install.sh | bash -s desktop # For CLI only curl -L https://raw.githubusercontent.com/Md-Abu-Bakkar/ApiUrlTester/main/install.sh | bash -s cli # Install Advanced Features curl -L https://raw.githubusercontent.com/Md-Abu-Bakkar/ApiUrlTester/main/install_advanced.sh | bash
+# For Desktop UI (Termux Desktop or Linux) curl -L https://raw.githubusercontent.com/Md-Abu-Bakkar/ApiUrlTester/main/install.sh | bash -s desktop                                                   # For CLI only curl -L https://raw.githubusercontent.com/Md-Abu-Bakkar/ApiUrlTemain/main/install.sh | bash -s cli                                                       # Install Advanced Features curl -L https://raw.githubusercontent.com/Md-Abu-Bakkar/ApiUrlTester/main/install_advanced.sh | bash
 
 Manual Installation
 
 bash
 
-# Clone repository git clone https://github.com/Md-Abu-Bakkar/ApiUrlTester.git cd ApiUrlTester # Install dependencies pip install -r requirements.txt # Install advanced dependencies pip install beautifulsoup4 cloudscraper selenium Pillow # Run the tool python main.py --mode cli
+# Clone repository git clone https://github.com/Md-Abu-Bakkar/ApiUrlTester.git cd ApiUrlTester                                                          # Install dependencies pip install -r requirements.txt                                                  # Install advanced dependencies pip install beautifulsoup4 cloudscraper selenium Pillow                                                      # Run the tool python main.py --mode cli
 
 Termux Specific Installation
 
 bash
 
-# Update packages pkg update && pkg upgrade # Install required packages pkg install python git wget curl # Install Python dependencies pip install requests python-telegram-bot beautifulsoup4 cloudscraper # For desktop mode (optional) pkg install x11-repo pkg install turbo-x11 termux-x11
+# Update packages pkg update && pkg upgrade                                                           # Install required packages pkg install python git wget curl                                         # Install Python dependencies pip install requests python-telegram-bot beautifulsoup4 cloudscraper                                      # For desktop mode (optional) pkg install x11-repo pkg install turbo-x11 termux-x11
 
 📖 Usage
 
@@ -119,7 +119,7 @@ Basic API Testing
 
 bash
 
-# CLI Mode python main.py --mode cli # Desktop Mode python main.py --mode desktop # Auto-detect Mode python main.py
+# CLI Mode python main.py --mode cli                                                                  # Desktop Mode python main.py --mode desktop                ‌‌                                         # Auto-detect Mode python main.py
 
 Main Menu Options
 
@@ -207,7 +207,7 @@ Example:
 
 bash
 
-# Paste this cURL command: curl -X POST 'https://api.example.com/login' \ -H 'Content-Type: application/json' \ -H 'Authorization: Bearer token123' \ --data '{"username":"user","password":"pass"}' # Tool automatically extracts: # - URL: https://api.example.com/login # - Method: POST # - Headers: Content-Type, Authorization # - JSON Body: username and password
+# Paste this cURL command: curl -X POST 'https://api.example.com/login' \ -H 'Content-Type: application/json' \ -H 'Authorization: Bearer token123' \ --data '{"username":"user","password":"pass"}'                                                                 # Tool automatically extracts:                                       # - URL: https://api.example.com/login                                        # - Method: POST                                                      # - Headers: Content-Type, Authorization                                                        # - JSON Body: username and password
 
 🔄 Multi-Method Testing
 
@@ -215,7 +215,7 @@ When you're unsure which HTTP method works:
 
 python
 
-# Tool automatically tries: 1. GET request 2. POST request 3. PUT request 4. DELETE request 5. With/without authentication 6. With/without cookies 7. Different header combinations # Stops when successful response is found
+# Tool automatically tries: 1. GET request 2. POST request 3. PUT request 4. DELETE request 5. With/without authentication 6. With/without cookies 7. Different header combinations                                                  # Stops when successful response is found
 
 💾 Code Export System
 
@@ -337,13 +337,13 @@ Common Issues & Solutions
 
 bash
 
-# Ensure X11 server is running termux-x11 & # Start desktop mode python main.py --mode desktop
+# Ensure X11 server is running termux-x11 &                                                         # Start desktop mode python main.py --mode desktop
 
 ❌ Python packages installation failed:
 
 bash
 
-# Upgrade pip first pip install --upgrade pip # Install individually pip install requests pip install python-telegram-bot pip install beautifulsoup4
+# Upgrade pip first pip install --upgrade pip                                                          # Install individually pip install requests pip install python-telegram-bot pip install beautifulsoup4
 
 ❌ Cloudflare bypass not working:
 
