@@ -43,10 +43,19 @@ install_termux_packages() {
     log_info "Installing Termux packages..."
     
     pkg update -y
-    pkg upgrade -y
     pkg install -y python git wget curl
     
     log_success "Termux packages installed"
+}
+
+# Install Python packages for Termux
+install_termux_python_packages() {
+    log_info "Installing Python packages for Termux..."
+    
+    # Termux-এ pip upgrade করা যায় না, তাই সরাসরি install
+    pip install requests python-telegram-bot
+    
+    log_success "Python packages installed"
 }
 
 # Install desktop packages
@@ -66,8 +75,8 @@ install_desktop_packages() {
     log_success "System packages installed"
 }
 
-# Install Python packages
-install_python_packages() {
+# Install Python packages for desktop
+install_desktop_python_packages() {
     log_info "Installing Python packages..."
     
     pip3 install --upgrade pip
@@ -92,6 +101,19 @@ download_project() {
     log_success "Project files downloaded"
 }
 
+# Check if required Python packages are installed
+check_python_packages() {
+    log_info "Checking Python dependencies..."
+    
+    if python3 -c "import requests, telegram" 2>/dev/null; then
+        log_success "All Python packages are available"
+        return 0
+    else
+        log_warning "Some Python packages are missing"
+        return 1
+    fi
+}
+
 # Main installation
 main_installation() {
     log_info "Starting API Tester installation..."
@@ -109,8 +131,12 @@ main_installation() {
     # Download project
     download_project
     
-    # Install Python packages
-    install_python_packages
+    # Install Python packages based on environment
+    if [ "$ENV" = "termux" ]; then
+        install_termux_python_packages
+    else
+        install_desktop_python_packages
+    fi
     
     # Make scripts executable
     chmod +x main.py
