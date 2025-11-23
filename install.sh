@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Universal API Tester - Auto Installer
-# One-command installation for Termux and Desktop
+# For Repository: https://github.com/Md-Abu-Bakkar/ApiUrlTester
 
 set -e
 
@@ -10,7 +10,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Logging functions
 log_info() {
@@ -42,88 +42,68 @@ detect_environment() {
 install_termux_packages() {
     log_info "Installing Termux packages..."
     
-    # Update packages
     pkg update -y
     pkg upgrade -y
-    
-    # Install required packages
     pkg install -y python git wget curl
     
-    # Install X11 packages if needed
-    if [ "$1" = "desktop" ]; then
-        log_info "Installing X11 packages for desktop mode..."
-        pkg install -y x11-repo
-        pkg install -y turbo-x11 termux-x11
+    log_success "Termux packages installed"
+}
+
+# Install desktop packages
+install_desktop_packages() {
+    log_info "Installing system packages..."
+    
+    if command -v apt &> /dev/null; then
+        sudo apt update && sudo apt install -y python3 python3-pip python3-tk git wget curl
+    elif command -v yum &> /dev/null; then
+        sudo yum install -y python3 python3-pip git wget curl tkinter
+    elif command -v pacman &> /dev/null; then
+        sudo pacman -Syu python python-pip git wget curl tk
+    else
+        log_warning "Unknown package manager, please install python3 manually"
     fi
     
-    log_success "Termux packages installed successfully"
+    log_success "System packages installed"
 }
 
 # Install Python packages
 install_python_packages() {
     log_info "Installing Python packages..."
     
-    # Upgrade pip
-    pip install --upgrade pip
+    pip3 install --upgrade pip
+    pip3 install requests python-telegram-bot pillow
     
-    # Install required packages
-    pip install requests python-telegram-bot pillow
-    
-    log_success "Python packages installed successfully"
+    log_success "Python packages installed"
 }
 
-# Setup desktop environment
-setup_desktop_environment() {
-    log_info "Setting up desktop environment..."
-    
-    # Create desktop shortcut
-    cat > ~/Desktop/api-tester.desktop << EOF
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Universal API Tester
-Comment=Professional API Testing Tool
-Exec=python3 $(pwd)/main.py --mode desktop
-Icon=$(pwd)/icon.png
-Categories=Development;
-Terminal=false
-StartupNotify=true
-EOF
-    
-    chmod +x ~/Desktop/api-tester.desktop
-    log_success "Desktop shortcut created"
-}
-
-# Download project files
+# Download project from your repository
 download_project() {
     log_info "Downloading project files..."
     
-    # Clone or download project files
-    if [ -d "universal-api-tester" ]; then
-        log_warning "Project directory already exists, updating..."
-        cd universal-api-tester
+    if [ -d "ApiUrlTester" ]; then
+        log_info "Project exists, updating..."
+        cd ApiUrlTester
         git pull || log_warning "Could not update, using existing files"
     else
-        git clone https://github.com/yourusername/universal-api-tester.git
-        cd universal-api-tester
+        git clone https://github.com/Md-Abu-Bakkar/ApiUrlTester.git
+        cd ApiUrlTester
     fi
     
     log_success "Project files downloaded"
 }
 
-# Main installation function
+# Main installation
 main_installation() {
-    log_info "Starting Universal API Tester installation..."
+    log_info "Starting API Tester installation..."
     
     ENV=$(detect_environment)
-    log_info "Detected environment: $ENV"
+    log_info "Environment: $ENV"
     
     # Install system packages
     if [ "$ENV" = "termux" ]; then
-        install_termux_packages "$1"
+        install_termux_packages
     else
-        log_info "Desktop environment detected, installing system packages..."
-        sudo apt update && sudo apt install -y python3 python3-pip python3-tk git wget curl
+        install_desktop_packages
     fi
     
     # Download project
@@ -132,70 +112,50 @@ main_installation() {
     # Install Python packages
     install_python_packages
     
-    # Setup desktop environment if requested
-    if [ "$1" = "desktop" ] && [ "$ENV" = "desktop" ]; then
-        setup_desktop_environment
-    fi
-    
     # Make scripts executable
     chmod +x main.py
     
-    log_success "🎉 Installation completed successfully!"
+    log_success "🎉 Installation completed!"
     log_info ""
+    log_info "To start the tool:"
+    log_info "cd ApiUrlTester"
     
-    if [ "$1" = "desktop" ] && [ "$ENV" = "termux" ]; then
-        log_info "To start in desktop mode, run:"
-        log_info "termux-x11 &"
+    if [ "$1" = "desktop" ]; then
         log_info "python3 main.py --mode desktop"
-    elif [ "$1" = "desktop" ]; then
-        log_info "To start in desktop mode, run:"
-        log_info "python3 main.py --mode desktop"
+        log_info "Or: python3 main.py (auto-detection)"
     else
-        log_info "To start in CLI mode, run:"
         log_info "python3 main.py --mode cli"
     fi
     
     log_info ""
-    log_info "You can also double-click the desktop shortcut (if created)"
+    log_info "📖 Full documentation: https://github.com/Md-Abu-Bakkar/ApiUrlTester"
 }
 
 # Show usage
 show_usage() {
-    echo "Universal API Tester - Installation Script"
+    echo "API Url Tester - Installation"
     echo ""
     echo "Usage: $0 [mode]"
     echo ""
     echo "Modes:"
-    echo "  desktop    Install with desktop UI support"
-    echo "  cli        Install only CLI mode (default)"
-    echo "  help       Show this help message"
+    echo "  desktop    Install with desktop UI"
+    echo "  cli        Install CLI mode (default)"
     echo ""
     echo "Example:"
-    echo "  $0 desktop    # Install with desktop UI"
-    echo "  $0 cli        # Install only CLI mode"
+    echo "  $0 cli        # Install CLI mode"
 }
 
 # Parse arguments
-MODE="cli"
-if [ $# -gt 0 ]; then
-    case $1 in
-        "desktop")
-            MODE="desktop"
-            ;;
-        "cli")
-            MODE="cli"
-            ;;
-        "help")
-            show_usage
-            exit 0
-            ;;
-        *)
-            log_error "Invalid option: $1"
-            show_usage
-            exit 1
-            ;;
-    esac
-fi
+MODE=${1:-"cli"}
+case $MODE in
+    "desktop"|"cli")
+        ;;
+    *)
+        log_error "Invalid mode: $MODE"
+        show_usage
+        exit 1
+        ;;
+esac
 
-# Run main installation
+# Run installation
 main_installation "$MODE"
