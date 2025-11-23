@@ -19,5 +19,19 @@ A professional, dual-mode API testing tool that works in both Termux Desktop and
 # For Desktop UI (Termux Desktop or Linux)
 curl -L https://raw.githubusercontent.com/yourrepo/install.sh | bash -s desktop
 
-# For CLI only
-curl -L https://raw.githubusercontent.com/yourrepo/install.sh | bash -s cli
+# One-command installation for CLI mode
+curl -L https://raw.githubusercontent.com/Md-Abu-Bakkar/ApiUrlTester/main/install.sh | bash -s cli
+
+
+
+# 🚀 Quick Start (Alternative Methods)
+
+# Method 1: Direct clone and run
+git clone https://github.com/Md-Abu-Bakkar/ApiUrlTester.git
+cd ApiUrlTester
+python main.py --mode cli
+
+# Method 2: Download and run directly
+wget https://raw.githubusercontent.com/Md-Abu-Bakkar/ApiUrlTester/main/main.py
+python main.py --mode cli
+
