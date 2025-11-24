@@ -1,169 +1,177 @@
 #!/usr/bin/env python3
 import re
 import json
-import urllib.parse
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urljoin, urlparse, parse_qs
 
 class AdvancedDevToolsParser:
     def __init__(self):
-        self.patterns = {
-            'curl': r'curl\s+[\'"]?([^\'"]+)[\'"]?',
-            'fetch': r'fetch\([\'"]([^\'"]+)[\'"][^)]*{([^}]*)}',
-            'axios': r'axios\.(?:get|post|put|delete)\([\'"]([^\'"]+)[\'"][^)]*{([^}]*)}',
-            'headers': r'([a-zA-Z\-]+):\s*([^\n]+)',
-            'json_body': r'(\{[\s\S]*?\})',
-            'url_params': r'(\?[^\s]+)',
-            'cookie': r'Cookie:\s*([^\n]+)'
-        }
-    
-    def parse_devtools_content(self, content):
-        """Parse any DevTools copied content and extract all APIs"""
+        self.session_cookies = {}
+        
+    def parse_raw_devtools(self, content):
+        """Parse raw DevTools content and extract all API information"""
+        print("🔄 Parsing DevTools content...")
+        
         lines = content.split('\n')
-        apis = []
-        current_api = {}
+        requests = []
+        current_request = {}
+        in_headers = False
+        in_request_payload = False
         
         for line in lines:
             line = line.strip()
             
-            # Detect new API section
-            if any(keyword in line for keyword in ['scheme', 'http', 'https', 'filename', 'Address']):
-                if current_api and any(key in current_api for key in ['url', 'headers', 'method']):
-                    apis.append(current_api)
-                    current_api = {}
+            # Detect new request
+            if line.startswith('scheme') or 'http' in line.lower() and any(x in line for x in ['GET', 'POST', 'PUT', 'DELETE']):
+                if current_request and 'url' in current_request:
+                    requests.append(current_request)
+                current_request = {'headers': {}, 'cookies': {}}
+                in_headers = False
+                in_request_payload = False
             
             # Extract URL components
             if line.startswith('scheme'):
-                current_api['scheme'] = line.split('\t')[-1].strip()
+                current_request['scheme'] = line.split('\t')[-1].strip()
             elif line.startswith('host'):
-                current_api['host'] = line.split('\t')[-1].strip()
+                current_request['host'] = line.split('\t')[-1].strip()
             elif line.startswith('filename'):
-                current_api['path'] = line.split('\t')[-1].strip()
-            elif line.startswith('Address'):
-                current_api['full_url'] = line.split('\t')[-1].strip()
+                current_request['path'] = line.split('\t')[-1].strip()
+            elif 'Address' in line and 'http' in line:
+                current_request['url'] = line.split('\t')[-1].strip()
             
-            # Extract headers
-            elif not line.startswith('\t') and ':' in line and not line.startswith(' '):
-                if 'headers' not in current_api:
-                    current_api['headers'] = {}
-                key, value = line.split(':', 1)
-                current_api['headers'][key.strip()] = value.strip()
+            # Extract method from status line
+            elif 'Status' in line and any(method in line for method in ['GET', 'POST', 'PUT', 'DELETE']):
+                for method in ['GET', 'POST', 'PUT', 'DELETE']:
+                    if method in line:
+                        current_request['method'] = method
+                        break
             
-            # Extract request parameters (form data)
-            elif '\t' in line and '=' in line:
-                if 'params' not in current_api:
-                    current_api['params'] = {}
-                key, value = line.split('\t')[-1].strip().split('=', 1)
-                current_api['params'][key] = value
+            # Headers section
+            elif line and ':' in line and not line.startswith('\t'):
+                if 'headers' not in current_request:
+                    current_request['headers'] = {}
+                
+                parts = line.split(':', 1)
+                if len(parts) == 2:
+                    key = parts[0].strip()
+                    value = parts[1].strip()
+                    current_request['headers'][key] = value
+                    
+                    # Extract cookies
+                    if key.lower() == 'cookie':
+                        self._parse_cookies(value, current_request)
             
-            # Detect method from status line
-            elif 'Status' in line and 'OK' in line:
-                current_api['method'] = 'GET'  # Default, will be updated
-            
-            # Extract cookies
-            elif 'Cookie' in line and ':' in line:
-                if 'cookies' not in current_api:
-                    current_api['cookies'] = {}
-                cookie_line = line.split(':', 1)[1].strip()
-                cookies = self.parse_cookies(cookie_line)
-                current_api['cookies'].update(cookies)
+            # Request payload parameters
+            elif line and '\t' in line and '=' in line and not line.startswith(' '):
+                if 'params' not in current_request:
+                    current_request['params'] = {}
+                
+                parts = line.split('\t')
+                if len(parts) >= 2 and '=' in parts[-1]:
+                    key_value = parts[-1].split('=', 1)
+                    if len(key_value) == 2:
+                        current_request['params'][key_value[0].strip()] = key_value[1].strip()
         
-        # Add the last API
-        if current_api and any(key in current_api for key in ['url', 'headers', 'method']):
-            apis.append(current_api)
+        # Add the last request
+        if current_request and 'url' in current_request:
+            requests.append(current_request)
         
-        return self.normalize_apis(apis)
+        # Build complete URLs and normalize
+        normalized_requests = []
+        for req in requests:
+            normalized = self._normalize_request(req)
+            if normalized:
+                normalized_requests.append(normalized)
+        
+        print(f"✅ Found {len(normalized_requests)} API endpoints")
+        return normalized_requests
     
-    def parse_cookies(self, cookie_string):
+    def _parse_cookies(self, cookie_string, request):
         """Parse cookie string into dictionary"""
-        cookies = {}
-        pairs = cookie_string.split(';')
-        for pair in pairs:
-            if '=' in pair:
-                key, value = pair.split('=', 1)
-                cookies[key.strip()] = value.strip()
-        return cookies
-    
-    def normalize_apis(self, apis):
-        """Normalize and complete API information"""
-        normalized_apis = []
+        if 'cookies' not in request:
+            request['cookies'] = {}
         
-        for api in apis:
-            # Build complete URL
-            if 'full_url' in api:
-                url = api['full_url']
+        cookies = cookie_string.split(';')
+        for cookie in cookies:
+            if '=' in cookie:
+                key, value = cookie.split('=', 1)
+                request['cookies'][key.strip()] = value.strip()
+    
+    def _normalize_request(self, request):
+        """Normalize request data and build complete URL"""
+        # Build URL if not complete
+        if 'url' not in request:
+            if all(k in request for k in ['scheme', 'host', 'path']):
+                request['url'] = f"{request['scheme']}://{request['host']}{request['path']}"
             else:
-                scheme = api.get('scheme', 'http')
-                host = api.get('host', '')
-                path = api.get('path', '')
-                url = f"{scheme}://{host}{path}"
-            
-            # Add parameters to URL if GET request
-            if 'params' in api and api.get('method', 'GET') == 'GET':
-                param_string = '&'.join([f"{k}={v}" for k, v in api['params'].items()])
-                url = f"{url}?{param_string}" if '?' not in url else f"{url}&{param_string}"
-            
-            normalized_api = {
-                'url': url,
-                'method': api.get('method', 'GET'),
-                'headers': api.get('headers', {}),
-                'cookies': api.get('cookies', {}),
-                'params': api.get('params', {}),
-                'requires_login': self.detect_login_requirement(api),
-                'api_type': self.detect_api_type(api)
-            }
-            
-            # Add POST data if available
-            if api.get('method') in ['POST', 'PUT'] and 'params' in api:
-                normalized_api['data'] = api['params']
-            
-            normalized_apis.append(normalized_api)
+                return None
         
-        return normalized_apis
+        # Set default method
+        if 'method' not in request:
+            request['method'] = 'GET'
+        
+        # Add parameters to URL for GET requests
+        if request['method'] == 'GET' and 'params' in request and request['params']:
+            param_string = '&'.join([f"{k}={v}" for k, v in request['params'].items()])
+            if '?' in request['url']:
+                request['url'] += '&' + param_string
+            else:
+                request['url'] += '?' + param_string
+        
+        # Detect API type
+        request['api_type'] = self._detect_api_type(request)
+        request['requires_login'] = self._requires_login(request)
+        
+        return request
     
-    def detect_login_requirement(self, api):
-        """Detect if API requires login"""
-        url = api.get('full_url', '') or api.get('url', '')
-        headers = api.get('headers', {})
+    def _detect_api_type(self, request):
+        """Detect the type of API"""
+        url = request['url'].lower()
         
-        # Check for session cookies
-        if any('session' in key.lower() or 'auth' in key.lower() 
-               for key in headers.keys()):
+        if 'login' in url or 'signin' in url or 'auth' in url:
+            return 'login'
+        elif 'data_smscdr' in url or 'data_' in url:
+            return 'data_api'
+        elif 'dashboard' in url or 'admin' in url:
+            return 'dashboard'
+        elif '.js' in url or '.css' in url or 'jquery' in url:
+            return 'resource'
+        else:
+            return 'unknown'
+    
+    def _requires_login(self, request):
+        """Check if API requires authentication"""
+        # Check cookies for session
+        cookies = request.get('cookies', {})
+        if any('session' in key.lower() or 'auth' in key.lower() for key in cookies.keys()):
             return True
         
-        # Check for authentication headers
-        if any(key.lower() in ['authorization', 'x-auth-token'] 
-               for key in headers.keys()):
+        # Check headers for auth tokens
+        headers = request.get('headers', {})
+        if any(key.lower() in ['authorization', 'x-auth-token', 'x-csrf-token'] for key in headers.keys()):
             return True
         
         # Check URL patterns that typically require auth
-        auth_patterns = ['/client/', '/dashboard', '/admin', '/user']
-        if any(pattern in url for pattern in auth_patterns):
+        auth_patterns = ['/client/', '/dashboard', '/admin', '/user', '/res/']
+        if any(pattern in request['url'] for pattern in auth_patterns):
             return True
         
         return False
     
-    def detect_api_type(self, api):
-        """Detect the type of API"""
-        url = api.get('full_url', '') or api.get('url', '')
-        
-        if 'data_smscdr' in url:
-            return 'sms_data'
-        elif 'login' in url or 'signin' in url:
-            return 'authentication'
-        elif 'dashboard' in url:
-            return 'dashboard'
-        elif 'jquery' in url or '.js' in url:
-            return 'resource'
-        else:
-            return 'data_api'
-    
-    def extract_login_info(self, apis):
-        """Extract login information from APIs"""
-        login_apis = [api for api in apis if api['api_type'] == 'authentication']
-        if login_apis:
-            return login_apis[0]
+    def extract_login_info(self, requests):
+        """Extract login-related information"""
+        login_requests = [req for req in requests if req['api_type'] == 'login']
+        if login_requests:
+            return login_requests[0]
         return None
     
-    def extract_data_apis(self, apis):
-        """Extract data APIs that need to be tested"""
-        return [api for api in apis if api['api_type'] in ['sms_data', 'data_api']]
+    def extract_data_apis(self, requests):
+        """Extract data APIs that need testing"""
+        return [req for req in requests if req['api_type'] in ['data_api', 'unknown'] and not req['api_type'] == 'resource']
+    
+    def get_base_url(self, requests):
+        """Extract base URL from requests"""
+        for req in requests:
+            if 'url' in req:
+                parsed = urlparse(req['url'])
+                return f"{parsed.scheme}://{parsed.netloc}"
+        return None
