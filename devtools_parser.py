@@ -2,195 +2,168 @@
 import re
 import json
 import urllib.parse
+from urllib.parse import parse_qs, urlparse
 
-class DevToolsParser:
+class AdvancedDevToolsParser:
     def __init__(self):
         self.patterns = {
-            'curl': r'curl\s+([^\']+?)\s+([^\']+?)(?:\s+-H\s+\'([^\']+)\')*\s*(?:--data-raw\s+\'([^\']+)\')?',
+            'curl': r'curl\s+[\'"]?([^\'"]+)[\'"]?',
             'fetch': r'fetch\([\'"]([^\'"]+)[\'"][^)]*{([^}]*)}',
             'axios': r'axios\.(?:get|post|put|delete)\([\'"]([^\'"]+)[\'"][^)]*{([^}]*)}',
             'headers': r'([a-zA-Z\-]+):\s*([^\n]+)',
-            'json': r'\{[^{}]*"[^"]*":[^}]*\}',
-            'url': r'https?://[^\s\'"]+'
+            'json_body': r'(\{[\s\S]*?\})',
+            'url_params': r'(\?[^\s]+)',
+            'cookie': r'Cookie:\s*([^\n]+)'
         }
     
-    def parse_any_input(self, user_input):
-        """Parse any DevTools copied content"""
-        result = {
-            'url': None,
-            'method': 'GET',
-            'headers': {},
-            'cookies': {},
-            'data': None,
-            'json_body': None,
-            'params': {}
-        }
+    def parse_devtools_content(self, content):
+        """Parse any DevTools copied content and extract all APIs"""
+        lines = content.split('\n')
+        apis = []
+        current_api = {}
         
-        # Try to detect input type
-        input_type = self.detect_input_type(user_input)
-        
-        if input_type == 'curl':
-            return self.parse_curl(user_input)
-        elif input_type == 'fetch':
-            return self.parse_fetch(user_input)
-        elif input_type == 'axios':
-            return self.parse_axios(user_input)
-        elif input_type == 'headers':
-            return self.parse_raw_headers(user_input)
-        elif input_type == 'url':
-            result['url'] = user_input.strip()
-            return result
-        else:
-            # Try mixed content parsing
-            return self.parse_mixed_content(user_input)
-    
-    def detect_input_type(self, text):
-        """Detect what type of DevTools content this is"""
-        text = text.strip()
-        
-        if text.startswith('curl '):
-            return 'curl'
-        elif 'fetch(' in text:
-            return 'fetch'
-        elif 'axios.' in text:
-            return 'axios'
-        elif re.search(r'^[A-Za-z\-]+:\s*.+', text, re.MULTILINE):
-            return 'headers'
-        elif re.match(r'^https?://', text):
-            return 'url'
-        else:
-            return 'mixed'
-    
-    def parse_curl(self, curl_command):
-        """Parse cURL command"""
-        result = {
-            'url': None,
-            'method': 'GET',
-            'headers': {},
-            'cookies': {},
-            'data': None,
-            'json_body': None
-        }
-        
-        # Extract URL
-        url_match = re.search(r"curl\s+['\"]([^'\"]+)['\"]", curl_command)
-        if not url_match:
-            url_match = re.search(r'curl\s+([^\s\']+)', curl_command)
-        
-        if url_match:
-            result['url'] = url_match.group(1)
-        
-        # Extract method
-        if '-X' in curl_command:
-            method_match = re.search(r'-X\s+([A-Z]+)', curl_command)
-            if method_match:
-                result['method'] = method_match.group(1)
-        
-        # Extract headers
-        header_matches = re.findall(r"-H\s+['\"]([^'\"]+)['\"]", curl_command)
-        for header in header_matches:
-            if ':' in header:
-                key, value = header.split(':', 1)
-                result['headers'][key.strip()] = value.strip()
-                
-                # Extract cookies from headers
-                if key.strip().lower() == 'cookie':
-                    cookies = self.parse_cookie_header(value.strip())
-                    result['cookies'].update(cookies)
-        
-        # Extract data
-        data_matches = re.findall(r"--data-raw\s+['\"]([^'\"]+)['\"]", curl_command)
-        if data_matches:
-            result['data'] = data_matches[0]
-            try:
-                result['json_body'] = json.loads(data_matches[0])
-            except:
-                pass
-        
-        return result
-    
-    def parse_fetch(self, fetch_code):
-        """Parse JavaScript fetch code"""
-        result = {
-            'url': None,
-            'method': 'GET',
-            'headers': {},
-            'data': None
-        }
-        
-        # Extract URL
-        url_match = re.search(r"fetch\(['\"]([^'\"]+)['\"]", fetch_code)
-        if url_match:
-            result['url'] = url_match.group(1)
-        
-        # Extract method and headers from options
-        options_match = re.search(r'\{([^}]+)\}', fetch_code)
-        if options_match:
-            options_text = options_match.group(1)
+        for line in lines:
+            line = line.strip()
             
-            # Method
-            method_match = re.search(r"method:\s*['\"]([^'\"]+)['\"]", options_text, re.IGNORECASE)
-            if method_match:
-                result['method'] = method_match.group(1).upper()
+            # Detect new API section
+            if any(keyword in line for keyword in ['scheme', 'http', 'https', 'filename', 'Address']):
+                if current_api and any(key in current_api for key in ['url', 'headers', 'method']):
+                    apis.append(current_api)
+                    current_api = {}
             
-            # Headers
-            headers_match = re.search(r"headers:\s*\{([^}]+)\}", options_text)
-            if headers_match:
-                headers_text = headers_match.group(1)
-                header_pairs = re.findall(r"['\"]?([^:'\"]+)['\"]?\s*:\s*['\"]?([^,'\"]+)['\"]?", headers_text)
-                for key, value in header_pairs:
-                    result['headers'][key.strip()] = value.strip()
+            # Extract URL components
+            if line.startswith('scheme'):
+                current_api['scheme'] = line.split('\t')[-1].strip()
+            elif line.startswith('host'):
+                current_api['host'] = line.split('\t')[-1].strip()
+            elif line.startswith('filename'):
+                current_api['path'] = line.split('\t')[-1].strip()
+            elif line.startswith('Address'):
+                current_api['full_url'] = line.split('\t')[-1].strip()
             
-            # Body
-            body_match = re.search(r"body:\s*JSON\.stringify\(([^)]+)\)", options_text)
-            if body_match:
-                try:
-                    result['json_body'] = json.loads(body_match.group(1).replace("'", '"'))
-                except:
-                    result['data'] = body_match.group(1)
+            # Extract headers
+            elif not line.startswith('\t') and ':' in line and not line.startswith(' '):
+                if 'headers' not in current_api:
+                    current_api['headers'] = {}
+                key, value = line.split(':', 1)
+                current_api['headers'][key.strip()] = value.strip()
+            
+            # Extract request parameters (form data)
+            elif '\t' in line and '=' in line:
+                if 'params' not in current_api:
+                    current_api['params'] = {}
+                key, value = line.split('\t')[-1].strip().split('=', 1)
+                current_api['params'][key] = value
+            
+            # Detect method from status line
+            elif 'Status' in line and 'OK' in line:
+                current_api['method'] = 'GET'  # Default, will be updated
+            
+            # Extract cookies
+            elif 'Cookie' in line and ':' in line:
+                if 'cookies' not in current_api:
+                    current_api['cookies'] = {}
+                cookie_line = line.split(':', 1)[1].strip()
+                cookies = self.parse_cookies(cookie_line)
+                current_api['cookies'].update(cookies)
         
-        return result
+        # Add the last API
+        if current_api and any(key in current_api for key in ['url', 'headers', 'method']):
+            apis.append(current_api)
+        
+        return self.normalize_apis(apis)
     
-    def parse_cookie_header(self, cookie_header):
-        """Parse cookie header string into dict"""
+    def parse_cookies(self, cookie_string):
+        """Parse cookie string into dictionary"""
         cookies = {}
-        pairs = cookie_header.split(';')
+        pairs = cookie_string.split(';')
         for pair in pairs:
             if '=' in pair:
                 key, value = pair.split('=', 1)
                 cookies[key.strip()] = value.strip()
         return cookies
     
-    def parse_mixed_content(self, text):
-        """Parse mixed DevTools content"""
-        result = {
-            'url': None,
-            'method': 'GET',
-            'headers': {},
-            'cookies': {},
-            'data': None
-        }
+    def normalize_apis(self, apis):
+        """Normalize and complete API information"""
+        normalized_apis = []
         
-        # Extract URL
-        url_match = re.search(r'https?://[^\s\']+', text)
-        if url_match:
-            result['url'] = url_match.group(0)
-        
-        # Extract headers
-        header_matches = re.findall(r'([A-Za-z\-]+):\s*([^\n]+)', text)
-        for key, value in header_matches:
-            result['headers'][key] = value.strip()
+        for api in apis:
+            # Build complete URL
+            if 'full_url' in api:
+                url = api['full_url']
+            else:
+                scheme = api.get('scheme', 'http')
+                host = api.get('host', '')
+                path = api.get('path', '')
+                url = f"{scheme}://{host}{path}"
             
-            if key.lower() == 'cookie':
-                cookies = self.parse_cookie_header(value)
-                result['cookies'].update(cookies)
+            # Add parameters to URL if GET request
+            if 'params' in api and api.get('method', 'GET') == 'GET':
+                param_string = '&'.join([f"{k}={v}" for k, v in api['params'].items()])
+                url = f"{url}?{param_string}" if '?' not in url else f"{url}&{param_string}"
+            
+            normalized_api = {
+                'url': url,
+                'method': api.get('method', 'GET'),
+                'headers': api.get('headers', {}),
+                'cookies': api.get('cookies', {}),
+                'params': api.get('params', {}),
+                'requires_login': self.detect_login_requirement(api),
+                'api_type': self.detect_api_type(api)
+            }
+            
+            # Add POST data if available
+            if api.get('method') in ['POST', 'PUT'] and 'params' in api:
+                normalized_api['data'] = api['params']
+            
+            normalized_apis.append(normalized_api)
         
-        # Extract JSON body
-        json_match = re.search(r'(\{.*\})', text, re.DOTALL)
-        if json_match:
-            try:
-                result['json_body'] = json.loads(json_match.group(1))
-            except:
-                result['data'] = json_match.group(1)
+        return normalized_apis
+    
+    def detect_login_requirement(self, api):
+        """Detect if API requires login"""
+        url = api.get('full_url', '') or api.get('url', '')
+        headers = api.get('headers', {})
         
-        return result
+        # Check for session cookies
+        if any('session' in key.lower() or 'auth' in key.lower() 
+               for key in headers.keys()):
+            return True
+        
+        # Check for authentication headers
+        if any(key.lower() in ['authorization', 'x-auth-token'] 
+               for key in headers.keys()):
+            return True
+        
+        # Check URL patterns that typically require auth
+        auth_patterns = ['/client/', '/dashboard', '/admin', '/user']
+        if any(pattern in url for pattern in auth_patterns):
+            return True
+        
+        return False
+    
+    def detect_api_type(self, api):
+        """Detect the type of API"""
+        url = api.get('full_url', '') or api.get('url', '')
+        
+        if 'data_smscdr' in url:
+            return 'sms_data'
+        elif 'login' in url or 'signin' in url:
+            return 'authentication'
+        elif 'dashboard' in url:
+            return 'dashboard'
+        elif 'jquery' in url or '.js' in url:
+            return 'resource'
+        else:
+            return 'data_api'
+    
+    def extract_login_info(self, apis):
+        """Extract login information from APIs"""
+        login_apis = [api for api in apis if api['api_type'] == 'authentication']
+        if login_apis:
+            return login_apis[0]
+        return None
+    
+    def extract_data_apis(self, apis):
+        """Extract data APIs that need to be tested"""
+        return [api for api in apis if api['api_type'] in ['sms_data', 'data_api']]
