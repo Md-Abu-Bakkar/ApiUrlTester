@@ -1,288 +1,327 @@
-# Add these imports at the top
+#!/usr/bin/env python3
+import os
+import json
+import requests
+from datetime import datetime
+from data_manager import DataManager
+from api_tester import APITester
+from utils.helpers import validate_url
+
+# Import advanced modules
 from advanced_login import AdvancedLoginSystem
 from captcha_solver import CaptchaSolver
-from devtools_parser import DevToolsParser
 from cloudflare_bypass import CloudflareBypass
+from devtools_parser import DevToolsParser
 from multi_method_tester import MultiMethodTester
 from code_exporter import CodeExporter
 
-# Add these new methods to the CLIMenu class:
-
-def advanced_login_menu(self):
-    """Advanced login system with captcha and Cloudflare bypass"""
-    self.print_header()
-    print("🔐 ADVANCED LOGIN SYSTEM")
-    print("-" * 40)
-    print()
-    
-    login_system = AdvancedLoginSystem()
-    captcha_solver = CaptchaSolver()
-    cloudflare_bypass = CloudflareBypass()
-    
-    print("1. 🔍 Auto-Detect Login System")
-    print("2. 🚀 Smart Login (Auto Captcha + Cloudflare)")
-    print("3. ↩️ Back")
-    print()
-    
-    choice = input("Select option (1-3): ").strip()
-    
-    if choice == '1':
-        self.auto_detect_login()
-    elif choice == '2':
-        self.smart_login_flow()
-    elif choice == '3':
-        return
-    else:
-        input("❌ Invalid option. Press Enter to continue...")
-
-def auto_detect_login(self):
-    """Auto-detect login system type"""
-    login_url = input("Enter login URL: ").strip()
-    username = input("Enter username/email: ").strip()
-    password = input("Enter password: ").strip()
-    
-    login_system = AdvancedLoginSystem()
-    
-    print("🔄 Analyzing login system...")
-    login_info = login_system.detect_login_type(login_url, username, password)
-    
-    print("\n📊 Login System Analysis:")
-    print(f"🔗 URL: {login_info.get('url')}")
-    print(f"📄 Content Type: {login_info.get('content_type')}")
-    print(f"📝 Has Form: {login_info.get('has_form')}")
-    print(f"🔐 Has CSRF: {login_info.get('has_csrf')}")
-    print(f"🛡️ Cloudflare: {login_info.get('has_cloudflare')}")
-    print(f"📋 Login Fields: {login_info.get('login_fields')}")
-    
-    input("\nPress Enter to continue...")
-
-def smart_login_flow(self):
-    """Complete smart login flow with captcha and Cloudflare"""
-    self.print_header()
-    print("🚀 SMART LOGIN FLOW")
-    print("-" * 40)
-    print()
-    
-    login_url = input("Enter login URL: ").strip()
-    username = input("Enter username/email: ").strip()
-    password = input("Enter password: ").strip()
-    
-    login_system = AdvancedLoginSystem()
-    captcha_solver = CaptchaSolver()
-    cloudflare_bypass = CloudflareBypass()
-    
-    print("\n🔄 Starting smart login...")
-    
-    # Step 1: Check for Cloudflare
-    print("1. Checking Cloudflare protection...")
-    cf_result = cloudflare_bypass.bypass_cloudflare(login_url)
-    if cf_result.get('success'):
-        print("✅ Cloudflare bypassed!")
-        # Update session with Cloudflare cookies
-        login_system.cookies.update(cf_result.get('cookies', {}))
-    
-    # Step 2: Perform login
-    print("2. Attempting login...")
-    login_result = login_system.perform_login(login_url, username, password)
-    
-    if login_result.get('success'):
-        print("✅ Login successful!")
-        print(f"📊 Status: {login_result.get('status_code')}")
-        print(f"🍪 Cookies stored: {len(login_system.cookies)}")
+class CLIMenu:
+    def __init__(self):
+        self.data_manager = DataManager()
+        self.api_tester = APITester()
+        self.config = self.load_config()
         
-        # Step 3: Test protected API
-        protected_url = input("\nEnter protected API URL to test (optional): ").strip()
-        if protected_url:
-            self.test_with_auth(protected_url, login_system.cookies)
-    else:
-        print(f"❌ Login failed: {login_result.get('error')}")
-    
-    input("\nPress Enter to continue...")
-
-def devtools_parser_menu(self):
-    """Parse DevTools copied content"""
-    self.print_header()
-    print("🧪 DEVTOOLS PARSER")
-    print("-" * 40)
-    print()
-    
-    print("Paste any content from DevTools (cURL, fetch, headers, etc.):")
-    print("Press Ctrl+D (Linux/Mac) or Ctrl+Z (Windows) when done:")
-    
-    user_input = ""
-    try:
-        while True:
-            line = input()
-            user_input += line + "\n"
-    except EOFError:
-        pass
-    
-    parser = DevToolsParser()
-    parsed_data = parser.parse_any_input(user_input)
-    
-    print("\n✅ Parsed Results:")
-    print(f"🔗 URL: {parsed_data.get('url')}")
-    print(f"⚡ Method: {parsed_data.get('method')}")
-    print(f"📋 Headers: {len(parsed_data.get('headers', {}))} items")
-    print(f"🍪 Cookies: {len(parsed_data.get('cookies', {}))} items")
-    print(f"📦 Data: {parsed_data.get('data')}")
-    print(f"📄 JSON Body: {parsed_data.get('json_body')}")
-    
-    # Ask if user wants to test this request
-    if parsed_data.get('url'):
-        test = input("\nTest this request? (y/n): ").strip().lower()
-        if test == 'y':
-            self.test_parsed_request(parsed_data)
-    
-    input("\nPress Enter to continue...")
-
-def multi_method_test_menu(self):
-    """Test API with multiple methods"""
-    self.print_header()
-    print("🔄 MULTI-METHOD API TESTER")
-    print("-" * 40)
-    print()
-    
-    url = input("Enter API URL: ").strip()
-    
-    tester = MultiMethodTester()
-    print(f"\n🔄 Testing all methods on: {url}")
-    
-    results = tester.test_all_methods(url)
-    
-    working_method = tester.find_working_method(results)
-    if working_method:
-        print(f"\n✅ Working method found: {working_method}")
+        # Initialize advanced systems
+        self.login_system = AdvancedLoginSystem()
+        self.captcha_solver = CaptchaSolver()
+        self.cloudflare_bypass = CloudflareBypass()
+        self.devtools_parser = DevToolsParser()
+        self.multi_tester = MultiMethodTester()
+        self.code_exporter = CodeExporter()
         
-        # Export code for working method
-        exporter = CodeExporter()
-        request_data = {
-            'url': url,
-            'method': working_method,
-            'headers': results[working_method].get('headers', {})
-        }
+    def load_config(self):
+        try:
+            with open('config.json', 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {'auto_save': True, 'timeout': 30}
+            
+    def save_config(self):
+        try:
+            with open('config.json', 'w') as f:
+                json.dump(self.config, f, indent=2)
+            print("✅ Configuration saved successfully!")
+        except Exception as e:
+            print(f"❌ Error saving config: {e}")
+            
+    def clear_screen(self):
+        os.system('clear' if os.name == 'posix' else 'cls')
         
-        python_code = exporter.export_python_code(request_data)
-        curl_code = exporter.export_curl_code(request_data)
-        
-        print("\n💾 Code exported:")
-        print("📝 Python code saved to: exported_code/api_request.py")
-        print("🔄 cURL command saved to: exported_code/api_request.curl")
-        
-        # Save files
-        exporter.save_code_file(python_code, 'api_request', 'py')
-        exporter.save_code_file(curl_code, 'api_request', 'curl')
-    else:
-        print("\n❌ No working method found")
-    
-    input("\nPress Enter to continue...")
-
-def code_export_menu(self):
-    """Export API request as code"""
-    self.print_header()
-    print("💾 CODE EXPORT SYSTEM")
-    print("-" * 40)
-    print()
-    
-    # Load latest successful request
-    try:
-        with open('data.json', 'r') as f:
-            data = json.load(f)
-            if isinstance(data, list) and data:
-                latest_request = data[-1]
-            else:
-                latest_request = data
-    except:
-        print("❌ No API test data found. Please test an API first.")
-        input("Press Enter to continue...")
-        return
-    
-    exporter = CodeExporter()
-    
-    print("Select export format:")
-    print("1. 🐍 Python Code")
-    print("2. 🔄 cURL Command")
-    print("3. 📜 JavaScript Code")
-    print("4. 📁 All Formats")
-    print("5. ↩️ Back")
-    print()
-    
-    choice = input("Select option (1-5): ").strip()
-    
-    request_data = {
-        'url': latest_request.get('url'),
-        'method': latest_request.get('method', 'GET'),
-        'headers': latest_request.get('headers', {})
-    }
-    
-    if choice == '1':
-        code = exporter.export_python_code(request_data)
-        filepath = exporter.save_code_file(code, 'api_request', 'py')
-        print(f"✅ Python code saved to: {filepath}")
-    elif choice == '2':
-        code = exporter.export_curl_code(request_data)
-        filepath = exporter.save_code_file(code, 'api_request', 'curl')
-        print(f"✅ cURL command saved to: {filepath}")
-    elif choice == '3':
-        code = exporter.export_javascript_code(request_data)
-        filepath = exporter.save_code_file(code, 'api_request', 'js')
-        print(f"✅ JavaScript code saved to: {filepath}")
-    elif choice == '4':
-        # Export all formats
-        python_code = exporter.export_python_code(request_data)
-        curl_code = exporter.export_curl_code(request_data)
-        js_code = exporter.export_javascript_code(request_data)
-        
-        exporter.save_code_file(python_code, 'api_request', 'py')
-        exporter.save_code_file(curl_code, 'api_request', 'curl')
-        exporter.save_code_file(js_code, 'api_request', 'js')
-        
-        print("✅ All formats exported to exported_code/ directory")
-    elif choice == '5':
-        return
-    else:
-        print("❌ Invalid option")
-    
-    input("\nPress Enter to continue...")
-
-# Update the main_menu method to include new options:
-def main_menu(self):
-    while True:
-        self.print_header()
-        print("1. 🔧 Test API Endpoint")
-        print("2. 🔐 Login & Access Protected API")
-        print("3. 🚀 Advanced Login System")  # NEW
-        print("4. 🧪 DevTools Parser")  # NEW
-        print("5. 🔄 Multi-Method Tester")  # NEW
-        print("6. 💾 Code Export")  # NEW
-        print("7. ⚙️ Configuration")
-        print("8. 📊 View Results")
-        print("9. 🤖 Telegram Bot Control")
-        print("10. 🚪 Exit")
+    def print_header(self):
+        self.clear_screen()
+        print("=" * 70)
+        print("           🚀 UNIVERSAL API TESTER - ADVANCED EDITION")
+        print("=" * 70)
         print()
         
-        choice = input("Select option (1-10): ").strip()
+    def main_menu(self):
+        while True:
+            self.print_header()
+            print("1. 🔧 Basic API Testing")
+            print("2. 🔐 Advanced Login System")
+            print("3. 🧪 DevTools Parser")
+            print("4. 🔄 Multi-Method Tester") 
+            print("5. 💾 Code Export")
+            print("6. 🤖 Telegram Bot Control")
+            print("7. ⚙️  Configuration")
+            print("8. 📊 View Results")
+            print("9. 🚪 Exit")
+            print()
+            
+            choice = input("Select option (1-9): ").strip()
+            
+            if choice == '1':
+                self.basic_api_test()
+            elif choice == '2':
+                self.advanced_login_menu()
+            elif choice == '3':
+                self.devtools_parser_menu()
+            elif choice == '4':
+                self.multi_method_test()
+            elif choice == '5':
+                self.code_export_menu()
+            elif choice == '6':
+                self.telegram_menu()
+            elif choice == '7':
+                self.config_menu()
+            elif choice == '8':
+                self.view_results_menu()
+            elif choice == '9':
+                print("👋 Goodbye!")
+                break
+            else:
+                input("❌ Invalid option. Press Enter to continue...")
+
+    def advanced_login_menu(self):
+        """Advanced login system with all features"""
+        while True:
+            self.print_header()
+            print("🔐 ADVANCED LOGIN SYSTEM")
+            print("-" * 50)
+            print()
+            
+            print("1. 🚀 Smart Login (Auto Captcha + Cloudflare)")
+            print("2. 🔍 Auto-Detect Login System")
+            print("3. 🛡️  Cloudflare Bypass Only")
+            print("4. 🧮 Math Captcha Solver")
+            print("5. ↩️  Back to Main Menu")
+            print()
+            
+            choice = input("Select option (1-5): ").strip()
+            
+            if choice == '1':
+                self.smart_login_flow()
+            elif choice == '2':
+                self.auto_detect_login()
+            elif choice == '3':
+                self.cloudflare_bypass_menu()
+            elif choice == '4':
+                self.math_captcha_solver()
+            elif choice == '5':
+                break
+            else:
+                input("❌ Invalid option. Press Enter to continue...")
+
+    def smart_login_flow(self):
+        """Complete smart login flow"""
+        self.print_header()
+        print("🚀 SMART LOGIN FLOW")
+        print("-" * 50)
+        print()
         
-        if choice == '1':
-            self.test_api_menu()
-        elif choice == '2':
-            self.login_protected_api_menu()
-        elif choice == '3':  # NEW
-            self.advanced_login_menu()
-        elif choice == '4':  # NEW
-            self.devtools_parser_menu()
-        elif choice == '5':  # NEW
-            self.multi_method_test_menu()
-        elif choice == '6':  # NEW
-            self.code_export_menu()
-        elif choice == '7':
-            self.config_menu()
-        elif choice == '8':
-            self.view_results_menu()
-        elif choice == '9':
-            self.telegram_menu()
-        elif choice == '10':
-            print("👋 Goodbye!")
-            break
+        login_url = input("Enter login URL: ").strip()
+        username = input("Enter username/email: ").strip()
+        password = input("Enter password: ").strip()
+        target_url = input("Enter target API URL (optional): ").strip()
+        
+        print("\n🔄 Starting smart login process...")
+        
+        try:
+            # Step 1: Cloudflare bypass
+            print("1. 🛡️  Checking Cloudflare protection...")
+            cf_result = self.cloudflare_bypass.bypass_cloudflare(login_url)
+            if cf_result.get('success'):
+                print("   ✅ Cloudflare bypassed!")
+            else:
+                print("   ℹ️  No Cloudflare protection detected")
+            
+            # Step 2: Perform login
+            print("2. 🔐 Attempting login...")
+            login_result = self.login_system.perform_login(login_url, username, password)
+            
+            if login_result.get('success'):
+                print("   ✅ Login successful!")
+                print(f"   📊 Status: {login_result.get('status_code')}")
+                print(f"   🍪 Cookies stored: {len(self.login_system.cookies)}")
+                
+                # Step 3: Test target API with authentication
+                if target_url:
+                    print("3. 🎯 Testing protected API...")
+                    self.test_with_auth(target_url, self.login_system.cookies)
+            else:
+                print(f"   ❌ Login failed: {login_result.get('error')}")
+                
+        except Exception as e:
+            print(f"❌ Error in smart login: {e}")
+        
+        input("\nPress Enter to continue...")
+
+    def devtools_parser_menu(self):
+        """DevTools content parser"""
+        self.print_header()
+        print("🧪 DEVTOOLS PARSER")
+        print("-" * 50)
+        print()
+        
+        print("Paste any content from browser DevTools:")
+        print("(cURL, fetch, headers, JSON, etc.)")
+        print("Press Ctrl+D when done:")
+        print()
+        
+        user_input = ""
+        try:
+            while True:
+                line = input()
+                user_input += line + "\n"
+        except EOFError:
+            pass
+        
+        if not user_input.strip():
+            print("❌ No input provided")
+            input("Press Enter to continue...")
+            return
+        
+        print("\n🔄 Parsing content...")
+        parsed_data = self.devtools_parser.parse_any_input(user_input)
+        
+        print("\n✅ Parsing Results:")
+        print(f"🔗 URL: {parsed_data.get('url') or 'Not found'}")
+        print(f"⚡ Method: {parsed_data.get('method', 'GET')}")
+        print(f"📋 Headers: {len(parsed_data.get('headers', {}))} items")
+        print(f"🍪 Cookies: {len(parsed_data.get('cookies', {}))} items")
+        
+        if parsed_data.get('json_body'):
+            print(f"📄 JSON Body: {json.dumps(parsed_data['json_body'], indent=2)[:200]}...")
+        elif parsed_data.get('data'):
+            print(f"📦 Data: {parsed_data['data'][:200]}...")
+        
+        # Test the parsed request
+        if parsed_data.get('url'):
+            test = input("\nTest this request? (y/n): ").strip().lower()
+            if test == 'y':
+                self.test_parsed_request(parsed_data)
+        
+        input("\nPress Enter to continue...")
+
+    def multi_method_test(self):
+        """Test API with multiple methods"""
+        self.print_header()
+        print("🔄 MULTI-METHOD API TESTER")
+        print("-" * 50)
+        print()
+        
+        url = input("Enter API URL: ").strip()
+        
+        if not validate_url(url):
+            input("❌ Invalid URL format. Press Enter to continue...")
+            return
+        
+        print(f"\n🔄 Testing all methods on: {url}")
+        print("This may take a few seconds...")
+        
+        results = self.multi_tester.test_all_methods(url)
+        
+        working_method = self.multi_tester.find_working_method(results)
+        if working_method:
+            print(f"\n✅ Working method found: {working_method}")
+            
+            # Export code for working method
+            request_data = {
+                'url': url,
+                'method': working_method,
+                'headers': results[working_method].get('headers', {})
+            }
+            
+            # Save all code formats
+            python_code = self.code_exporter.export_python_code(request_data)
+            curl_code = self.code_exporter.export_curl_code(request_data)
+            js_code = self.code_exporter.export_javascript_code(request_data)
+            
+            self.code_exporter.save_code_file(python_code, 'api_request', 'py')
+            self.code_exporter.save_code_file(curl_code, 'api_request', 'curl')
+            self.code_exporter.save_code_file(js_code, 'api_request', 'js')
+            
+            print("\n💾 Code exported to 'exported_code/' directory:")
+            print("   📝 Python: api_request.py")
+            print("   🔄 cURL: api_request.curl") 
+            print("   📜 JavaScript: api_request.js")
         else:
-            input("❌ Invalid option. Press Enter to continue...")
+            print("\n❌ No working method found")
+        
+        input("\nPress Enter to continue...")
+
+    def basic_api_test(self):
+        """Original basic API testing"""
+        self.print_header()
+        print("🔧 BASIC API TESTING")
+        print("-" * 50)
+        print()
+        
+        url = input("Enter API URL: ").strip()
+        if not validate_url(url):
+            input("❌ Invalid URL format. Press Enter to continue...")
+            return
+            
+        print("\nAvailable methods: GET, POST, PUT, DELETE")
+        method = input("Enter method [GET]: ").strip().upper() or "GET"
+        
+        print("\nEnter headers (JSON format, empty for default):")
+        headers_input = input().strip()
+        headers = json.loads(headers_input) if headers_input else {}
+        
+        body = {}
+        if method in ['POST', 'PUT']:
+            print("\nEnter request body (JSON format, empty for none):")
+            body_input = input().strip()
+            body = json.loads(body_input) if body_input else {}
+            
+        print(f"\n🔄 Testing {method} {url}...")
+        
+        try:
+            response = self.api_tester.test_endpoint(url, method, headers, body)
+            self.data_manager.save_response(response)
+            
+            print("✅ API Test Completed!")
+            print(f"📊 Status Code: {response.get('status_code')}")
+            print(f"⏱️  Response Time: {response.get('response_time', 0):.2f}s")
+            print(f"💾 Saved to: data.json, data.txt")
+            
+            # Show preview
+            response_data = response.get('response', {})
+            if isinstance(response_data, dict):
+                preview = json.dumps(response_data, indent=2)[:500] + "..." 
+            else:
+                preview = str(response_data)[:500] + "..."
+                
+            print(f"\n📄 Response Preview:\n{preview}")
+            
+        except Exception as e:
+            print(f"❌ Error testing API: {e}")
+            
+        input("\nPress Enter to continue...")
+
+    # ... (other methods like config_menu, view_results_menu, telegram_menu remain same)
+
+def run_cli_mode():
+    """Entry point for CLI mode"""
+    try:
+        menu = CLIMenu()
+        menu.main_menu()
+    except KeyboardInterrupt:
+        print("\n👋 Goodbye!")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        input("Press Enter to continue...")
+
+if __name__ == '__main__':
+    run_cli_mode()
